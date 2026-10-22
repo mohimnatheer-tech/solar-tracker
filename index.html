@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><title>متتبع الشمس</title>
+<meta name="description" content="مشروع Arduino لوح شمسي يتتبع الشمس بثلاث مقاومات ضوئية ومحركين خطوييين. جرّب المحاكاة وشاهد الكود وخطوات البناء.">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: workbench. Two live views (top + side) over a control strip, readouts beside, energy chart, then code/wiring tabs. */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --fg:#1b2422; --muted:#5d6b67; --line:#d6dcd9;
+  --sun:#e08a00; --cell:#0e7c86; --warn:#c2410c; --good:#2f855a; --canvas:#eef2f0;
+  --font-body:"IBM Plex Sans Arabic",system-ui,sans-serif; --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1514; --panel:#172120; --fg:#e6ecea; --muted:#93a39e; --line:#283533;
+  --sun:#ffb02e; --cell:#38c1cc; --warn:#ff9a62; --good:#5fd199; --canvas:#111a19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1514; --panel:#172120; --fg:#e6ecea; --muted:#93a39e; --line:#283533;
+  --sun:#ffb02e; --cell:#38c1cc; --warn:#ff9a62; --good:#5fd199; --canvas:#111a19; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.6;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.hbtn{margin:0}
+body.display .controls,body.display .row:not(.hbtn),body.display #docs,body.display .sub{display:none}
+body.display .wrap{max-width:1500px}
+body.display .st{font-size:28px}
+body.display .hero,body.display .nav,body.display .build,body.display .foot{display:none}
+body.display .grid{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+body.display .oled .big{font-size:34px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-size:26px;margin:0;line-height:1.3;text-wrap:balance}
+h2{font-size:16px;margin:0 0 8px}
+.sub{color:var(--muted);margin:4px 0 0;max-width:65ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px}
+@media(max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.views{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:520px){.views{grid-template-columns:1fr}}
+.view{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.view h2{font-size:13px;color:var(--muted);font-weight:500;display:flex;justify-content:space-between}
+canvas{display:block;width:100%;background:var(--canvas);border-radius:6px;touch-action:none;cursor:grab}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 20px;margin-top:14px}
+.ctl label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.ctl b{color:var(--fg);font-family:var(--font-mono);font-weight:500;direction:ltr}
+input[type=range]{width:100%;accent-color:var(--cell)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+button{font:inherit;font-size:14px;padding:7px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--cell)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cell);outline-offset:2px}
+button[aria-pressed=true],button.on{background:var(--cell);border-color:var(--cell);color:#fff}
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.oled{background:#06080a;color:#7df0ff;font-family:var(--font-mono);border-radius:6px;padding:10px 12px;direction:ltr;text-align:left;font-size:13px;line-height:1.5;border:2px solid #2a3338}
+.oled .big{font-size:22px;color:#fff}
+.ldr{display:grid;grid-template-columns:70px 1fr 44px;align-items:center;gap:8px;font-size:13px;margin-top:6px}
+.bar{height:10px;background:var(--canvas);border-radius:5px;overflow:hidden;direction:ltr}
+.bar i{display:block;height:100%;background:var(--sun);width:0}
+.num{font-family:var(--font-mono);direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;margin-top:10px}
+.stats span{color:var(--muted)}
+.leds{display:flex;gap:10px;align-items:center;font-size:13px;margin-top:10px;color:var(--muted)}
+.led{width:12px;height:12px;border-radius:50%;background:var(--line)}
+.led.on{background:#ff4f87;box-shadow:0 0 8px #ff4f87}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:8px;align-items:center}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-inline-end:6px}
+.gain{margin-inline-start:auto;color:var(--fg)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+pre{direction:ltr;text-align:left;font-family:var(--font-mono);font-size:12.5px;line-height:1.55;background:var(--canvas);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0;overflow-x:auto}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+td code{font-family:var(--font-mono);direction:ltr;unicode-bidi:embed}
+.how{max-width:68ch}.how p{margin:0 0 10px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:1080px;margin:0 auto 28px}
+.nav b{font-size:16px;display:flex;align-items:center;gap:8px}
+.nav b i{width:14px;height:14px;border-radius:50%;background:var(--sun);box-shadow:0 0 0 4px color-mix(in srgb,var(--sun) 28%,transparent)}
+.nav a{color:var(--muted);text-decoration:none;margin-inline-start:18px;font-size:14px}.nav a:hover{color:var(--fg)}
+.hero{max-width:1080px;margin:0 auto 36px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;align-items:end}
+@media(max-width:760px){.hero{grid-template-columns:minmax(0,1fr)}}
+.hero h1{font-size:clamp(34px,6vw,60px);line-height:1.15;margin:0 0 14px;text-wrap:balance;font-weight:700}
+.hero h1 em{font-style:normal;color:var(--sun)}
+.hero p{color:var(--muted);font-size:17px;max-width:48ch;margin:0 0 20px}
+.cta{display:inline-block;background:var(--sun);color:#1b1300;text-decoration:none;font-weight:700;padding:11px 22px;border-radius:8px}
+.cta:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
+.facts{display:grid;gap:0;border-top:1px solid var(--line)}
+.facts div{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px}
+.facts span{color:var(--muted)}.facts b{font-family:var(--font-mono);font-weight:500;direction:ltr}
+.st{font-size:24px;margin:0;line-height:1.3}
+.build{max-width:1080px;margin:0 auto;width:100%}
+.build ol{margin:12px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;counter-reset:s}
+.build li{counter-increment:s;border-top:2px solid var(--cell);padding-top:10px}
+.build li::before{content:counter(s);font-family:var(--font-mono);color:var(--cell);font-weight:500;display:block;font-size:13px}
+.build li b{display:block;margin:2px 0 4px}.build li span{color:var(--muted);font-size:14px}
+.foot{max-width:1080px;margin:10px auto 0;width:100%;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:13px}
+html{scroll-behavior:smooth}
+</style></head><body>
+
+<nav class="nav"><b><i></i>متتبع الشمس</b><div><a href="#sim">المحاكاة</a><a href="#build">البناء</a><a href="#docs">الكود</a></div></nav>
+<section class="hero"><div><h1>لوح شمسي يلاحق <em>الشمس</em> بنفسه</h1>
+<p>مشروع Arduino يستخدم ثلاث مقاومات ضوئية ومحركين خطوييين ليدور اللوح ويميل حتى يواجه الشمس طول النهار. جرّب المحاكاة، وانسخ الكود، وابنه في البيت.</p>
+<a class="cta" href="#sim">ابدأ المحاكاة</a></div>
+<div class="facts"><div><span>المتحكم</span><b>Arduino Uno</b></div><div><span>الحساسات</span><b>3 × LDR</b></div><div><span>المحركات</span><b>2 × 28BYJ-48</b></div><div><span>الشاشة</span><b>OLED I2C</b></div></div></section>
+<div class="wrap" id="sim">
+  <header>
+    <div class="head"><h2 class="st">جرّب المحاكاة</h2>
+      <div class="row hbtn"><button id="show" aria-pressed="false">⛶ وضع العرض</button></div></div>
+    <p class="sub">محاكاة للوح الشمسي في الفيديو. ثلاث مقاومات ضوئية (LDR) تقيس الضوء، ومحركان خطوييان يدوران اللوح أفقياً وعمودياً حتى يواجه الشمس. حرّك الشمس بالسحب أو شغّل دورة يوم كامل.</p>
+  </header>
+
+  <div class="grid">
+    <section>
+      <div class="views">
+        <div class="view"><h2><span>منظر علوي (الاتجاه)</span><span class="num" id="azTxt"></span></h2><canvas id="cTop" aria-label="منظر علوي"></canvas></div>
+        <div class="view"><h2><span>منظر جانبي (الارتفاع)</span><span class="num" id="elTxt"></span></h2><canvas id="cSide" aria-label="منظر جانبي"></canvas></div>
+      </div>
+      <div class="controls">
+        <div class="ctl"><label for="sA">اتجاه الشمس <b id="sAv"></b></label><input id="sA" type="range" min="0" max="359" value="120"></div>
+        <div class="ctl"><label for="sE">ارتفاع الشمس <b id="sEv"></b></label><input id="sE" type="range" min="0" max="90" value="35"></div>
+        <div class="ctl"><label for="cl">الغيوم <b id="clv"></b></label><input id="cl" type="range" min="0" max="90" value="0"></div>
+        <div class="ctl"><label for="sp">سرعة الزمن <b id="spv"></b></label><input id="sp" type="range" min="1" max="6" value="2"></div>
+      </div>
+      <div class="row">
+        <button id="play" aria-pressed="true">⏸ إيقاف</button>
+        <button id="track" aria-pressed="true">التتبع: يعمل</button>
+        <button id="reset">تصفير الطاقة</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="box">
+        <h2>شاشة OLED</h2>
+        <div class="oled"><div>SOLAR TRACKER</div><div class="big" id="oP">0 mW</div><div id="oS">TRACKING</div></div>
+        <div class="leds"><span class="led" id="l1"></span><span class="led" id="l2"></span><span id="ledTxt">الإضاءة تعمل عند التحريك</span></div>
+      </div>
+      <div class="box">
+        <h2>قراءة الـ LDR (A0 – A2)</h2>
+        <div class="ldr"><span>A0 علوي</span><div class="bar"><i id="b0"></i></div><span class="num" id="v0">0</span></div>
+        <div class="ldr"><span>A1 يسار</span><div class="bar"><i id="b1"></i></div><span class="num" id="v1">0</span></div>
+        <div class="ldr"><span>A2 يمين</span><div class="bar"><i id="b2"></i></div><span class="num" id="v2">0</span></div>
+        <div class="stats">
+          <span>محرك الاتجاه</span><b class="num" id="pA"></b>
+          <span>محرك الميل</span><b class="num" id="pE"></b>
+          <span>زاوية الخطأ</span><b class="num" id="err"></b>
+          <span>الوقت</span><b class="num" id="clock"></b>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="chart">
+    <h2>القدرة الناتجة</h2>
+    <div class="legend">
+      <span><i style="background:var(--cell)"></i>لوح يتتبع</span>
+      <span><i style="background:var(--muted)"></i>لوح ثابت (جنوب، ميل 30°)</span>
+      <span class="gain">مكسب الطاقة: <b class="num" id="gain">—</b></span>
+    </div>
+    <canvas id="cChart" style="cursor:default" aria-label="مخطط القدرة"></canvas>
+    <div class="stats" style="grid-template-columns:auto 1fr auto 1fr;max-width:520px">
+      <span>طاقة المتتبع</span><b class="num" id="eT"></b><span>طاقة الثابت</span><b class="num" id="eF"></b>
+    </div>
+  </section>
+
+  <section class="box" id="docs">
+    <div class="tabs" role="tablist">
+      <button class="on" data-t="how" role="tab">كيف يشتغل</button>
+      <button data-t="wire" role="tab">القطع والتوصيل</button>
+      <button data-t="code" role="tab">كود Arduino</button>
+    </div>
+    <div id="t-how" class="how">
+      <p>الـ LDR الثلاثة مثبتة خلف اللوح بشكل مثلث وكل واحدة مائلة قليلاً عن الأخرى. إذا كانت الشمس أمام اللوح تماماً تعطي الثلاث قراءات متقاربة. إذا مالت الشمس إلى جهة تزيد قراءة المقاومة القريبة منها وتنقص الأخرى.</p>
+      <p>الكود يحسب اتجاه الخطأ من فرق القراءات، ثم يحرك المحرك الأول (قاعدة الدوران) للأفقي والمحرك الثاني (محور الميل) للعمودي إلى أن يقل الفرق عن حد صغير. عند الليل أو الغيوم الكثيفة تقل القراءات عن الحد الأدنى فيتوقف اللوح ولا يتحرك عبثاً.</p>
+      <p>سرعة الدوران في المحاكاة أسرع من الواقع، فمحرك 28BYJ-48 بطيء (حوالي 10 إلى 15 درجة بالثانية).</p>
+    </div>
+    <div id="t-wire" class="tbl" hidden>
+      <table>
+        <tr><th>القطعة</th><th>الوصلة</th><th>الدور</th></tr>
+        <tr><td>Arduino Uno</td><td>—</td><td>المتحكم</td></tr>
+        <tr><td>3 × LDR + مقاومة 10kΩ</td><td><code>A0, A1, A2</code></td><td>مقسم جهد لكل مقاومة، قراءة الضوء</td></tr>
+        <tr><td>28BYJ-48 + ULN2003 (اتجاه)</td><td><code>D2 – D5</code></td><td>تدوير القاعدة</td></tr>
+        <tr><td>28BYJ-48 + ULN2003 (ميل)</td><td><code>D6 – D9</code></td><td>إمالة اللوح</td></tr>
+        <tr><td>شاشة OLED I2C</td><td><code>A4 (SDA), A5 (SCL)</code></td><td>عرض الحالة</td></tr>
+        <tr><td>لوح شمسي صغير 6V</td><td>—</td><td>مصدر الطاقة المقاسة</td></tr>
+        <tr><td>LED وردي × 2</td><td><code>D10, D11</code></td><td>إضاءة القاعدة عند الحركة</td></tr>
+        <tr><td>أجزاء مطبوعة 3D</td><td>—</td><td>القاعدة، الأعمدة، إطار اللوح، حامل الـ LDR</td></tr>
+      </table>
+    </div>
+    <div id="t-code" hidden><pre>#include &lt;Stepper.h&gt;
+
+const int STEPS = 2048;               // 28BYJ-48
+Stepper pan(STEPS, 2, 4, 3, 5);
+Stepper tilt(STEPS, 6, 8, 7, 9);
+
+const int TOP = A0, LEFT = A1, RIGHT = A2;
+const int MIN_LIGHT = 60;             // below this: night / heavy cloud
+const int DEAD = 25;                  // dead band
+int tiltPos = 0;                      // steps, limit 0..512 (0..90 deg)
+
+void setup() {
+  pan.setSpeed(10);
+  tilt.setSpeed(10);
+}
+
+void loop() {
+  int t = analogRead(TOP);
+  int l = analogRead(LEFT);
+  int r = analogRead(RIGHT);
+  int sum = t + l + r;
+
+  if (sum / 3 &gt; MIN_LIGHT) {
+    int ex = r - l;                   // horizontal error
+    int ey = t - (l + r) / 2;         // vertical error
+
+    if (abs(ex) &gt; DEAD) pan.step(ex &gt; 0 ? 4 : -4);
+
+    if (abs(ey) &gt; DEAD) {
+      int d = ey &gt; 0 ? 4 : -4;
+      if (tiltPos + d &gt;= 0 &amp;&amp; tiltPos + d &lt;= 512) {
+        tilt.step(d);
+        tiltPos += d;
+      }
+    }
+  }
+  delay(20);
+}</pre></div>
+  </section>
+
+  <section class="build" id="build">
+    <h2 class="st">خطوات البناء</h2>
+    <ol>
+      <li><b>اطبع الأجزاء</b><span>القاعدة، العمود، إطار اللوح وحامل المقاومات الضوئية، بطابعة 3D.</span></li>
+      <li><b>وصّل الإلكترونيات</b><span>ثبّت Arduino في القاعدة ووصّل لوحتي ULN2003 والمحركين حسب جدول التوصيل.</span></li>
+      <li><b>ركّب الحساسات</b><span>ضع المقاومات الضوئية الثلاث بشكل مثلث خلف اللوح، كل واحدة مائلة لجهة، مع مقاومة 10kΩ لكل منها.</span></li>
+      <li><b>اربط اللوح بالمحاور</b><span>المحرك الأول يدير القاعدة والثاني يميل اللوح. تأكد أن الأسلاك تتحمل الدوران.</span></li>
+      <li><b>ارفع الكود</b><span>انسخ الكود من الأعلى وارفعه بـ Arduino IDE، ثم عدّل حد الإضاءة وحد الخطأ حسب موقعك.</span></li>
+    </ol>
+  </section>
+  <footer class="foot">فكرة المشروع من فيديو @marceline_tech على TikTok. المحاكاة والكود والتوصيل في هذه الصفحة مكتوبة من جديد وقد تختلف عن النسخة الأصلية.</footer>
+</div>
+<script>
+document.documentElement.lang='ar';document.documentElement.dir='rtl';
+(function(){
+const $=id=>document.getElementById(id);
+const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI, clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const S={ sunA:120, sunE:35, cloud:0, play:true, track:true, speed:2, hour:6.3,
+  panA:200, panE:20, eT:0, eF:0, moving:0, read:[0,0,0], err:0, pT:0, pF:0, noise:0 };
+const PMAX=600, LDR_HALF=rad(38), PHI=[90,210,330].map(rad);
+const histT=[],histF=[],HN=260; let sampleAcc=0;
+
+function nVec(A,E){A=rad(A);E=rad(E);return [Math.cos(E)*Math.sin(A),Math.cos(E)*Math.cos(A),Math.sin(E)]}
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+function basis(A,E){A=rad(A);E=rad(E);
+  return {n:[Math.cos(E)*Math.sin(A),Math.cos(E)*Math.cos(A),Math.sin(E)],
+          a:[Math.cos(A),-Math.sin(A),0],
+          u:[-Math.sin(E)*Math.sin(A),-Math.sin(E)*Math.cos(A),Math.cos(E)]}}
+function ldrDirs(A,E){const b=basis(A,E);return PHI.map(p=>[0,1,2].map(k=>b.n[k]*Math.cos(LDR_HALF)+Math.sin(LDR_HALF)*(Math.cos(p)*b.a[k]+Math.sin(p)*b.u[k])))}
+
+function setSun(a,e){S.sunA=(a+360)%360;S.sunE=clamp(e,0,90);$('sA').value=Math.round(S.sunA);$('sE').value=Math.round(S.sunE)}
+function dayFromHour(h){const f=(h-6)/12;S.sunA=90+180*f;S.sunE=Math.max(0,68*Math.sin(Math.PI*f));
+  $('sA').value=Math.round(S.sunA);$('sE').value=Math.round(S.sunE)}
+
+function step(dt){
+  if(S.play){S.hour+=dt*0.3*S.speed;if(S.hour>18){S.hour=6}dayFromHour(S.hour)}
+  const s=nVec(S.sunA,S.sunE), dirs=ldrDirs(S.panA,S.panE), cl=1-S.cloud;
+  S.read=dirs.map(d=>Math.round(clamp(Math.max(0,dot(d,s))*cl*1023*(1+(Math.random()-.5)*0.03),0,1023)));
+  const sum=S.read[0]+S.read[1]+S.read[2];
+  let moving=false;
+  if(S.track && sum/3>40 && S.sunE>0.5){
+    let ex=0,ey=0;for(let i=0;i<3;i++){ex+=S.read[i]*Math.cos(PHI[i]);ey+=S.read[i]*Math.sin(PHI[i])}
+    ex/=sum;ey/=sum;
+    const maxV=70*Math.min(S.speed,3)/2;
+    const dA=clamp(ex*260,-maxV,maxV)*dt, dE=clamp(ey*260,-maxV,maxV)*dt;
+    if(Math.abs(ex)>0.015){S.panA=(S.panA+dA+360)%360;moving=true}
+    if(Math.abs(ey)>0.015){const n=clamp(S.panE+dE,0,90);if(n!==S.panE)moving=true;S.panE=n}
+  }
+  S.moving=moving;
+  const n=nVec(S.panA,S.panE), cosT=Math.max(0,dot(n,s));
+  S.err=deg(Math.acos(clamp(dot(n,s),-1,1)));
+  S.pT=PMAX*cosT*cl; const f=nVec(180,30); S.pF=PMAX*Math.max(0,dot(f,s))*cl;
+  const hrs=dt*0.3*(S.play?S.speed:0);
+  S.eT+=S.pT*hrs;S.eF+=S.pF*hrs;
+  sampleAcc+=dt;if(sampleAcc>0.12){sampleAcc=0;histT.push(S.pT);histF.push(S.pF);if(histT.length>HN){histT.shift();histF.shift()}}
+}
+
+/* ---------- drawing ---------- */
+function cv(id,ratio){const c=$(id),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=Math.round(w*ratio);
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);c.style.height=h+'px'}
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);return {x,w,h,c}}
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function sunShape(x,px,py,r,C){const g=x.createRadialGradient(px,py,r*.3,px,py,r*2.6);g.addColorStop(0,C.sun);g.addColorStop(1,'transparent');
+  x.globalAlpha=.35*(1-S.cloud*.6);x.fillStyle=g;x.beginPath();x.arc(px,py,r*2.6,0,7);x.fill();x.globalAlpha=1;
+  x.fillStyle=C.sun;x.beginPath();x.arc(px,py,r,0,7);x.fill()}
+function lerpCol(v){return `hsl(${38+v*0},95%,${30+v*35}%)`}
+
+const geo={};
+function drawTop(C){
+  const {x,w,h}=cv('cTop',1);const cx=w/2,cy=h/2,R=w/2-22;geo.top={cx,cy,R};
+  x.strokeStyle=C.line;x.lineWidth=1;
+  for(const k of [.33,.66,1]){x.beginPath();x.arc(cx,cy,R*k,0,7);x.stroke()}
+  x.beginPath();x.moveTo(cx-R,cy);x.lineTo(cx+R,cy);x.moveTo(cx,cy-R);x.lineTo(cx,cy+R);x.stroke();
+  x.fillStyle=C.muted;x.font='12px '+C.font;x.textAlign='center';x.textBaseline='middle';
+  x.fillText('ش',cx,cy-R-11);x.fillText('ج',cx,cy+R+11);x.fillText('ق',cx+R+11,cy);x.fillText('غ',cx-R-11,cy);
+  // base
+  x.fillStyle=C.panel;x.strokeStyle=C.line;x.beginPath();x.ellipse(cx,cy,R*.3,R*.3,0,0,7);x.fill();x.stroke();
+  const A=rad(S.panA), dx=Math.sin(A), dy=-Math.cos(A), L=R*.3+R*.35*Math.cos(rad(S.panE));
+  // sun ray
+  const sa=rad(S.sunA), sx=cx+Math.sin(sa)*R, sy=cy-Math.cos(sa)*R;
+  x.strokeStyle=C.sun;x.globalAlpha=.4;x.setLineDash([4,5]);x.beginPath();x.moveTo(cx,cy);x.lineTo(sx,sy);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+  // panel
+  x.save();x.translate(cx+dx*R*.12,cy+dy*R*.12);x.rotate(A);
+  x.fillStyle=C.cell;x.fillRect(-R*.38,-R*.2,R*.76,R*.12);x.fillStyle='rgba(255,255,255,.25)';
+  for(let i=1;i<6;i++)x.fillRect(-R*.38+i*R*.76/6,-R*.2,1,R*.12);x.restore();
+  // ldr dots
+  const dirs=ldrDirs(S.panA,S.panE);
+  dirs.forEach((d,i)=>{const px=cx+d[0]*R*.55,py=cy-d[1]*R*.55,v=S.read[i]/1023;
+    x.fillStyle=`rgba(255,${Math.round(150+80*v)},${Math.round(40+60*v)},${.35+.65*v})`;x.strokeStyle=C.fg;x.lineWidth=1;x.beginPath();x.arc(px,py,5,0,7);x.fill();x.stroke()});
+  sunShape(x,sx,sy,9,C);
+}
+function drawSide(C){
+  const {x,w,h}=cv('cSide',1);const R=w/2-22,cx=w/2,cy=h*.78;geo.side={cx,cy,R};
+  x.strokeStyle=C.line;x.lineWidth=1;
+  for(const k of [.5,1]){x.beginPath();x.arc(cx,cy,R*k,Math.PI,0);x.stroke()}
+  x.beginPath();x.moveTo(cx-R-10,cy);x.lineTo(cx+R+10,cy);x.stroke();
+  x.fillStyle=C.muted;x.font='12px '+C.font;x.textAlign='center';x.fillText('الأفق',cx,cy+16);
+  const sg=Math.sin(rad(S.sunA))>=0?1:-1, se=rad(S.sunE);
+  const sx=cx+sg*Math.cos(se)*R, sy=cy-Math.sin(se)*R;
+  x.strokeStyle=C.sun;x.globalAlpha=.4;x.setLineDash([4,5]);x.beginPath();x.moveTo(cx,cy-R*.18);x.lineTo(sx,sy);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+  // device: base + pole + panel
+  const bw=R*.55;x.fillStyle=C.panel;x.strokeStyle=C.line;x.beginPath();x.roundRect(cx-bw/2,cy-R*.1,bw,R*.1,6);x.fill();x.stroke();
+  x.fillRect(cx-R*.06,cy-R*.22,R*.12,R*.13);x.strokeRect(cx-R*.06,cy-R*.22,R*.12,R*.13);
+  const pg=Math.sin(rad(S.panA))>=0?1:-1, pe=rad(S.panE), nx=pg*Math.cos(pe), ny=-Math.sin(pe);
+  x.save();x.translate(cx,cy-R*.24);x.rotate(Math.atan2(ny,nx)+Math.PI/2);
+  x.fillStyle=C.cell;x.fillRect(-R*.32,-4,R*.64,8);x.fillStyle='rgba(255,255,255,.25)';for(let i=1;i<6;i++)x.fillRect(-R*.32+i*R*.64/6,-4,1,8);
+  x.strokeStyle=C.fg;x.lineWidth=1.5;x.beginPath();x.moveTo(0,-4);x.lineTo(0,-R*.18);x.stroke();x.restore();
+  sunShape(x,sx,sy,9,C);
+}
+function drawChart(C){
+  const {x,w,h}=cv('cChart',w0()>600?.26:.5);const pl=44,pr=10,pt=10,pb=22,iw=w-pl-pr,ih=h-pt-pb;
+  x.font='11px '+C.mono;x.fillStyle=C.muted;x.strokeStyle=C.line;x.lineWidth=1;x.textAlign='right';x.textBaseline='middle';
+  for(let i=0;i<=3;i++){const v=PMAX*i/3,y=pt+ih-ih*i/3;x.beginPath();x.moveTo(pl,y);x.lineTo(w-pr,y);x.stroke();x.fillText(Math.round(v)+'',pl-6,y)}
+  x.textAlign='left';x.fillText('mW',2,pt+2);
+  const line=(arr,c,wd)=>{x.strokeStyle=c;x.lineWidth=wd;x.beginPath();arr.forEach((v,i)=>{const px=pl+iw*i/(HN-1),py=pt+ih-ih*clamp(v/PMAX,0,1);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()};
+  if(histT.length>1){line(histF,C.muted,1.8);line(histT,C.cell,2.4);
+    const i=histT.length-1,px=pl+iw*i/(HN-1);x.fillStyle=C.cell;x.beginPath();x.arc(px,pt+ih-ih*clamp(histT[i]/PMAX,0,1),4,0,7);x.fill()}
+  x.fillStyle=C.muted;x.textAlign='center';x.textBaseline='top';x.fillText('الوقت ←',w/2,h-14);
+}
+function w0(){return $('cChart').clientWidth}
+
+function ui(){
+  $('sAv').textContent=Math.round(S.sunA)+'°';$('sEv').textContent=Math.round(S.sunE)+'°';
+  $('clv').textContent=Math.round(S.cloud*100)+'%';$('spv').textContent='×'+S.speed;
+  $('azTxt').textContent=Math.round(S.panA)+'°';$('elTxt').textContent=Math.round(S.panE)+'°';
+  $('pA').textContent=S.panA.toFixed(0)+'°';$('pE').textContent=S.panE.toFixed(0)+'°';
+  $('err').textContent=S.err.toFixed(1)+'°';
+  const hh=Math.floor(S.hour),mm=Math.floor((S.hour-hh)*60);$('clock').textContent=S.play?String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'):'يدوي';
+  for(let i=0;i<3;i++){$('v'+i).textContent=S.read[i];$('b'+i).style.width=(S.read[i]/1023*100)+'%'}
+  $('oP').textContent=Math.round(S.pT)+' mW';
+  const dark=S.sunE<=0.5||(1-S.cloud)*Math.max(...S.read)/1023<0.04;
+  $('oS').textContent=!S.track?'LOCKED':dark?'WAITING (LOW LIGHT)':S.moving?'TRACKING':'ALIGNED';
+  $('l1').classList.toggle('on',S.moving);$('l2').classList.toggle('on',S.moving);
+  $('ledTxt').textContent=S.moving?'اللوح يتحرك':'اللوح ثابت';
+  $('eT').textContent=S.eT.toFixed(0)+' mWh';$('eF').textContent=S.eF.toFixed(0)+' mWh';
+  $('gain').textContent=S.eF>5?'+'+((S.eT/S.eF-1)*100).toFixed(0)+'%':'—';
+}
+
+let last=performance.now();
+function frame(t){const dt=Math.min(.05,(t-last)/1000);last=t;step(dt);
+  const st=getComputedStyle(document.documentElement),g=n=>st.getPropertyValue(n).trim();
+  const C={line:g('--line'),muted:g('--muted'),fg:g('--fg'),panel:g('--panel'),sun:g('--sun'),cell:g('--cell'),
+    font:'IBM Plex Sans Arabic, sans-serif',mono:'IBM Plex Mono, monospace'};
+  drawTop(C);drawSide(C);drawChart(C);ui();requestAnimationFrame(frame)}
+
+/* ---------- input ---------- */
+function manual(){S.play=false;$('play').setAttribute('aria-pressed','false');$('play').textContent='▶ تشغيل دورة اليوم'}
+$('sA').oninput=e=>{manual();S.sunA=+e.target.value};
+$('sE').oninput=e=>{manual();S.sunE=+e.target.value};
+$('cl').oninput=e=>{S.cloud=+e.target.value/100};
+$('sp').oninput=e=>{S.speed=+e.target.value};
+$('play').onclick=()=>{S.play=!S.play;if(S.play&&(S.hour<6||S.hour>18))S.hour=6;
+  $('play').setAttribute('aria-pressed',S.play);$('play').textContent=S.play?'⏸ إيقاف':'▶ تشغيل دورة اليوم'};
+$('track').onclick=()=>{S.track=!S.track;$('track').setAttribute('aria-pressed',S.track);$('track').textContent='التتبع: '+(S.track?'يعمل':'متوقف')};
+$('reset').onclick=()=>{S.eT=S.eF=0;histT.length=histF.length=0};
+function drag(id,fn){const c=$(id);let on=false;
+  const mv=e=>{const r=c.getBoundingClientRect();fn((e.clientX-r.left)*(c.clientWidth/r.width),(e.clientY-r.top)*(c.clientHeight/r.height))};
+  c.addEventListener('pointerdown',e=>{on=true;c.setPointerCapture(e.pointerId);c.style.cursor='grabbing';manual();mv(e)});
+  c.addEventListener('pointermove',e=>{if(on)mv(e)});
+  const up=()=>{on=false;c.style.cursor='grab'};c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up)}
+drag('cTop',(px,py)=>{const g=geo.top;if(!g)return;setSun(deg(Math.atan2(px-g.cx,-(py-g.cy))),S.sunE)});
+drag('cSide',(px,py)=>{const g=geo.side;if(!g)return;const dx=px-g.cx,dy=g.cy-py;
+  const e=deg(Math.atan2(Math.max(dy,0),Math.abs(dx)));const a=S.sunA;
+  const east=Math.sin(rad(a))>=0;const flip=(dx>=0)!==east&&Math.abs(dx)>6;
+  setSun(flip?360-a:a,e)});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  ['how','wire','code'].forEach(k=>$('t-'+k).hidden=(k!==b.dataset.t))});
+$('show').onclick=()=>{const on=!document.body.classList.contains('display');
+  document.body.classList.toggle('display',on);$('show').setAttribute('aria-pressed',on);
+  $('show').textContent=on?'✕ خروج من العرض':'⛶ وضع العرض';
+  try{if(on&&document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+      else if(!on&&document.fullscreenElement)document.exitFullscreen().catch(()=>{})}catch(e){}
+  if(on){S.play=true;$('play').setAttribute('aria-pressed','true');$('play').textContent='⏸ إيقاف'}};
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.classList.contains('display'))$('show').click()});
+dayFromHour(S.hour);
+requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
